@@ -4,6 +4,7 @@ class Scarb < Formula
   url "https://github.com/software-mansion/scarb/archive/refs/tags/v2.5.4.tar.gz"
   sha256 "d9c3d2b4d688fd6035f689b556e4fe5e176d3e882fb45108dac117206be7160f"
   license "MIT"
+  revision 1
   head "https://github.com/software-mansion/scarb.git", branch: "main"
 
   livecheck do
@@ -24,7 +25,15 @@ class Scarb < Formula
   depends_on "rust" => :build
 
   def install
-    system "cargo", "install", *std_cargo_args(path: "scarb")
+    %w[
+      scarb
+      extensions/scarb-cairo-language-server
+      extensions/scarb-cairo-run
+      extensions/scarb-cairo-test
+      extensions/scarb-snforge-test-collector
+    ].each do |f|
+      system "cargo", "install", *std_cargo_args(path: f)
+    end
   end
 
   test do
