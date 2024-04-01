@@ -28,40 +28,33 @@ class Hdf5 < Formula
   depends_on "cmake" => :build
   depends_on "gcc" # for gfortran
   depends_on "libaec"
+  depends_on "open-mpi" # for parallel support
   depends_on "pkg-config"
-
   uses_from_macos "zlib"
 
   conflicts_with "hdf5-mpi", because: "hdf5-mpi is a variant of hdf5, one can only use one or the other"
 
   def install
     ENV["libaec_DIR"] = Formula["libaec"].opt_prefix.to_s
+    # Work around incompatibility with new linker (FB13194355)
+    # https://github.com/HDFGroup/hdf5/issues/3571
+    ENV.append "LDFLAGS", "-Wl,-ld_classic" if DevelopmentTools.clang_build_version >= 1500
     args = %w[
       -DHDF5_USE_GNU_DIRS:BOOL=ON
       -DHDF5_INSTALL_CMAKE_DIR=lib/cmake/hdf5
       -DHDF5_BUILD_FORTRAN:BOOL=ON
       -DHDF5_BUILD_CPP_LIB:BOOL=ON
       -DHDF5_ENABLE_SZIP_SUPPORT:BOOL=ON
+      -DHDF5_ENABLE_SZIP_SUPPORT:BOOL=ON
+      -DHDF5_ENABLE_PARALLEL:BOOL=ON
+      -DALLOW_UNSUPPORTED:BOOL=ON
+      -DCMAKE_C_COMPILER=mpicc
+      -DCMAKE_CXX_COMPILER=mpic++
+      -DCMAKE_FC_COMPILER=mpifort
+      -DCMAKE_F77_COMPILER=mpif77
+      -DCMAKE_F90_COMPILER=mpif90
     ]
     system "cmake", "-S", ".", "-B", "build", *args, *std_cmake_args
-
-    # Avoid c shims in settings files
-    inreplace_c_files = %w[
-      build/src/H5build_settings.c
-      build/src/libhdf5.settings
-      build/CMakeFiles/h5cc
-      build/CMakeFiles/h5hlcc
-    ]
-    inreplace inreplace_c_files, Superenv.shims_path/ENV.cc, ENV.cc
-
-    # Avoid cpp shims in settings files
-    inreplace_cxx_files = %w[
-      build/CMakeFiles/h5c++
-      build/CMakeFiles/h5hlc++
-    ]
-    inreplace_cxx_files << "build/src/libhdf5.settings" if OS.linux?
-    inreplace inreplace_cxx_files, Superenv.shims_path/ENV.cxx, ENV.cxx
-
     system "cmake", "--build", "build"
     system "cmake", "--install", "build"
   end
@@ -77,6 +70,8 @@ class Hdf5 < Formula
       }
     EOS
     system "#{bin}/h5cc", "test.c"
+    assert_equal version.to_s, shell_output("./a.out").chomp
+    system "#{bin}/h5pcc", "test.c"
     assert_equal version.to_s, shell_output("./a.out").chomp
 
     (testpath/"test.f90").write <<~EOS
@@ -107,6 +102,7 @@ class Hdf5 < Formula
       end
     EOS
     system bin/"h5fc", "test.f90"
+    system "#{bin}/h5pfc", "test.f90"
     assert_equal version.to_s, shell_output("./a.out").chomp
 
     # Make sure that it was built with SZIP/libaec
